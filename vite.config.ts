@@ -3,13 +3,17 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  base: './', // Ensures assets are loaded correctly relative to the deployment root
+  // Ensures assets load correctly on GitHub Pages and other subfolder-based hosting
+  base: './',
   define: {
+    // Specifically shim needed variables for browser context
     'process.env.API_KEY': JSON.stringify(process.env.API_KEY),
-    'process.env': process.env
+    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
   },
   build: {
     outDir: 'dist',
+    assetsDir: 'assets',
+    emptyOutDir: true,
     sourcemap: false,
     rollupOptions: {
       output: {
@@ -19,5 +23,9 @@ export default defineConfig({
         }
       }
     }
+  },
+  server: {
+    port: 3000,
+    strictPort: true,
   }
 });

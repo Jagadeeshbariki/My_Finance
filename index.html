@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>FinTrack | Personal Finance</title>
-    <link rel="manifest" href="./manifest.json">
+    <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#4f46e5">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2845/2845812.png">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -34,16 +34,16 @@
         <div class="no-js-message">This application requires JavaScript to function. Please enable it in your browser settings.</div>
     </noscript>
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <!-- Using relative path for Vite entry point to support all deployment types -->
+    <script type="module" src="index.tsx"></script>
     <script>
-      // Only attempt SW registration if we are not in an iframe or specific restricted environment
-      if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
+      // Service Worker registration with origin-safe relative paths
+      if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
         window.addEventListener('load', () => {
-          // Use relative path to ensure origin matching
-          navigator.serviceWorker.register('./sw.js', { scope: './' })
+          navigator.serviceWorker.register('sw.js', { scope: './' })
             .then(reg => console.log('Service Worker Registered'))
             .catch(err => {
-              console.warn('Service Worker Registration Failed (Expected in some preview environments):', err.message);
+              console.warn('Service Worker registration skipped or failed:', err.message);
             });
         });
       }
