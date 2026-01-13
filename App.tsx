@@ -36,8 +36,9 @@ const App: React.FC = () => {
     const handler = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      // Check if already installed
-      if (!window.matchMedia('(display-mode: standalone)').matches) {
+      // Show prompt if not already installed
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+      if (!isStandalone) {
         setShowInstallBanner(true);
       }
     };
@@ -48,14 +49,6 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('fintrack_history', JSON.stringify(history));
   }, [history]);
-
-  useEffect(() => {
-    localStorage.setItem('fintrack_tags', JSON.stringify(tags));
-  }, [tags]);
-
-  useEffect(() => {
-    localStorage.setItem('fintrack_script_url', scriptUrl);
-  }, [scriptUrl]);
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
@@ -70,14 +63,8 @@ const App: React.FC = () => {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.type !== 'application/pdf') {
-      setError('Please upload a valid PDF bank statement.');
-      return;
-    }
-
     setIsProcessing(true);
     setError(null);
-
     try {
       const reader = new FileReader();
       reader.onload = async () => {
@@ -86,89 +73,51 @@ const App: React.FC = () => {
           const extracted = await extractTransactionsFromPDF(base64);
           setTransactions(extracted.map(t => ({ ...t, status: 'pending' })));
         } catch (err: any) {
-          setError(err.message || 'AI Extraction failed. Check your API key.');
-        } finally {
-          setIsProcessing(false);
-        }
+          setError(err.message || 'AI Extraction failed.');
+        } finally { setIsProcessing(false); }
       };
       reader.readAsDataURL(file);
     } catch (err: any) {
-      setError('File read failed: ' + err.message);
+      setError('File read failed.');
       setIsProcessing(false);
     }
   };
 
   const syncToSpreadsheet = async () => {
     const approvedTransactions = transactions.filter(t => t.status === 'approved');
-    if (approvedTransactions.length === 0) {
-      setError('Please select transactions using the checkboxes first.');
-      return;
-    }
-
+    if (approvedTransactions.length === 0) return;
     setIsSyncing(true);
-    setError(null);
-
     try {
-      const payload = approvedTransactions.map(t => ({
-        date: t.date,
-        bankName: t.bankName,
-        description: t.description,
-        amount: Number(t.amount),
-        direction: t.direction,
-        type: t.type,
-        tag: t.tag
-      }));
-
       await fetch(scriptUrl, {
         method: 'POST',
         mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(approvedTransactions),
       });
-
-      // Update history state
-      const updatedHistory = [...history, ...approvedTransactions];
-      setHistory(updatedHistory);
-      
-      // Remove synced items from current list
+      setHistory([...history, ...approvedTransactions]);
       setTransactions(prev => prev.filter(t => t.status !== 'approved'));
-      
-      setIsSyncing(false);
-      alert(`Successfully synced ${approvedTransactions.length} items to your Sheet!`);
-      
-      if (transactions.length === approvedTransactions.length) {
-        setActiveTab('dashboard');
-      }
-    } catch (err: any) {
-      setError('Sync failed. Please verify your Script URL and Deployment settings.');
-      setIsSyncing(false);
-    }
+      alert('Synced successfully!');
+    } catch (err) {
+      setError('Sync failed. Check your Apps Script URL.');
+    } finally { setIsSyncing(false); }
   };
 
   return (
     <div className="min-h-screen pb-20 bg-slate-50 transition-colors duration-500">
-      {/* PWA Install Notification */}
+      {/* Fixed Bottom PWA Install Banner */}
       {showInstallBanner && (
-        <div className="bg-indigo-600 text-white px-4 py-3 flex items-center justify-between shadow-lg sticky top-0 z-[100] animate-in slide-in-from-top duration-500">
-          <div className="flex items-center">
-            <div className="bg-indigo-500 p-2 rounded-lg mr-3">
-              <i className="fas fa-download text-white"></i>
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-md bg-white border border-slate-200 p-4 rounded-2xl shadow-2xl z-[100] flex items-center justify-between animate-in slide-in-from-bottom-10 duration-500">
+          <div className="flex items-center space-x-3">
+            <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
+              <i className="fas fa-wallet text-white text-xl"></i>
             </div>
             <div>
-              <p className="text-sm font-bold">Install FinTrack App</p>
-              <p className="text-[10px] text-indigo-100">Access your finances directly from your home screen.</p>
+              <p className="text-sm font-bold text-slate-800">Install FinTrack</p>
+              <p className="text-[10px] text-slate-500">Fast, offline-ready & convenient</p>
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <button 
-              onClick={handleInstallClick} 
-              className="bg-white text-indigo-600 px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-50 transition-colors shadow-sm"
-            >
-              Install Now
-            </button>
-            <button onClick={() => setShowInstallBanner(false)} className="text-indigo-200 hover:text-white p-2">
-              <i className="fas fa-times"></i>
-            </button>
+            <button onClick={handleInstallClick} className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-700 active:scale-95 transition-all">Install</button>
+            <button onClick={() => setShowInstallBanner(false)} className="text-slate-400 p-2 hover:text-slate-600"><i className="fas fa-times"></i></button>
           </div>
         </div>
       )}
@@ -178,103 +127,56 @@ const App: React.FC = () => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {activeTab === 'upload' ? (
           <div className="space-y-8 max-w-6xl mx-auto">
-            {/* Sync Config Card */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 group">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-slate-700 flex items-center">
-                  <i className="fas fa-link mr-2 text-indigo-500 group-hover:rotate-45 transition-transform"></i>
-                  Sync Destination
-                </h3>
-                <span className="text-[10px] font-bold text-slate-400 px-2 py-0.5 bg-slate-50 rounded">AUTO-SAVE ENABLED</span>
-              </div>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
               <input 
                 type="text" 
                 value={scriptUrl}
                 onChange={(e) => setScriptUrl(e.target.value)}
                 placeholder="Google Apps Script URL..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-xs focus:ring-2 focus:ring-indigo-500 outline-none font-mono transition-all"
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-xs font-mono"
               />
             </div>
 
-            {/* Upload Area */}
-            <div className="bg-white p-16 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500"></div>
-              
-              <div className="w-20 h-20 bg-indigo-50 rounded-2xl flex items-center justify-center mb-6 ring-8 ring-indigo-50/50">
-                <i className="fas fa-file-invoice-dollar text-indigo-600 text-3xl"></i>
+            <div className="bg-white p-16 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center text-center">
+              <div className="w-20 h-20 bg-indigo-50 rounded-2xl flex items-center justify-center mb-6">
+                <i className="fas fa-cloud-upload-alt text-indigo-600 text-3xl"></i>
               </div>
-              <h2 className="text-2xl font-bold text-slate-800">Analyze Statement</h2>
-              <p className="text-slate-500 text-sm mb-8 max-w-sm">Drop your PDF bank statement here. Gemini AI will automatically extract dates, amounts, and categories.</p>
-              
-              <label className="cursor-pointer bg-slate-900 text-white px-10 py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-xl hover:shadow-indigo-200 active:scale-95 flex items-center">
-                <i className="fas fa-upload mr-2"></i>
-                Select Bank PDF
+              <h2 className="text-2xl font-bold text-slate-800">Bank Statement AI</h2>
+              <p className="text-slate-500 text-sm mb-8">Upload your PDF for instant categorization.</p>
+              <label className="cursor-pointer bg-slate-900 text-white px-10 py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-xl flex items-center">
+                <i className="fas fa-file-pdf mr-2"></i> Choose PDF File
                 <input type="file" accept=".pdf" className="sr-only" onChange={handleFileUpload} />
               </label>
-              
-              {isProcessing && (
-                <div className="mt-8 flex flex-col items-center text-indigo-600 font-bold animate-pulse">
-                  <i className="fas fa-brain text-3xl mb-3 fa-bounce"></i>
-                  <span className="text-sm tracking-widest uppercase">AI is reading your statement...</span>
-                </div>
-              )}
-              
-              {error && (
-                <div className="mt-8 p-4 bg-red-50 text-red-600 rounded-xl text-xs border border-red-100 max-w-md flex items-center">
-                  <i className="fas fa-exclamation-triangle mr-3 text-lg"></i>
-                  <div className="text-left font-medium">{error}</div>
-                </div>
-              )}
+              {isProcessing && <div className="mt-8 text-indigo-600 font-bold animate-pulse">AI is extracting data...</div>}
+              {error && <div className="mt-8 text-red-500 text-sm font-medium">{error}</div>}
             </div>
 
-            {/* Table Area */}
             {transactions.length > 0 && (
-              <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="px-6 py-5 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
-                  <div className="flex items-center space-x-6">
-                    <button 
-                      onClick={() => {
-                        const allApproved = transactions.every(t => t.status === 'approved');
-                        setTransactions(transactions.map(t => ({ ...t, status: allApproved ? 'pending' : 'approved' })));
-                      }}
-                      className="text-xs font-bold text-indigo-600 hover:text-indigo-700"
-                    >
-                      {transactions.every(t => t.status === 'approved') ? 'Deselect All' : 'Select All'}
-                    </button>
-                    <div className="h-4 w-px bg-slate-200"></div>
-                    <span className="text-xs text-slate-500 font-semibold">
-                      {transactions.filter(t => t.status === 'approved').length} selected for sync
-                    </span>
-                  </div>
-                  <button 
-                    onClick={syncToSpreadsheet}
-                    disabled={isSyncing || transactions.filter(t => t.status === 'approved').length === 0}
-                    className={`px-8 py-2.5 rounded-2xl text-sm font-bold shadow-lg transition-all flex items-center ${
-                      isSyncing || transactions.filter(t => t.status === 'approved').length === 0
-                      ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
-                      : 'bg-emerald-600 text-white hover:bg-emerald-700 hover:-translate-y-1 shadow-emerald-200'
-                    }`}
-                  >
-                    {isSyncing ? <i className="fas fa-circle-notch fa-spin mr-2"></i> : <i className="fas fa-cloud-upload-alt mr-2"></i>}
-                    Approve & Save to Sheets
-                  </button>
+              <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
+                <div className="px-6 py-5 bg-slate-50 flex justify-between items-center">
+                   <span className="text-xs text-slate-500 font-semibold">{transactions.filter(t => t.status === 'approved').length} Ready to Sync</span>
+                   <button 
+                    onClick={syncToSpreadsheet} 
+                    disabled={isSyncing}
+                    className="bg-emerald-600 text-white px-8 py-2.5 rounded-2xl text-sm font-bold shadow-lg hover:bg-emerald-700 disabled:opacity-50"
+                   >
+                     {isSyncing ? 'Syncing...' : 'Approve & Sync'}
+                   </button>
                 </div>
-                
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
-                    <thead className="bg-slate-50/30 text-slate-400 text-[10px] font-bold uppercase tracking-widest">
+                    <thead className="bg-slate-50/50 text-slate-400 text-[10px] uppercase font-bold tracking-widest">
                       <tr>
-                        <th className="px-6 py-5 w-10 text-center">Sync</th>
-                        <th className="px-4 py-5">Date</th>
-                        <th className="px-4 py-5">Bank</th>
-                        <th className="px-4 py-5">Description</th>
-                        <th className="px-4 py-5">Amount</th>
-                        <th className="px-4 py-5">Category</th>
-                        <th className="px-4 py-5">Tag</th>
-                        <th className="px-6 py-5"></th>
+                        <th className="px-6 py-4 w-10"></th>
+                        <th className="px-4 py-4">Date</th>
+                        <th className="px-4 py-4">Bank</th>
+                        <th className="px-4 py-4">Description</th>
+                        <th className="px-4 py-4">Amount</th>
+                        <th className="px-4 py-4">Type</th>
+                        <th className="px-6 py-4"></th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-slate-50">
                       {transactions.map(t => (
                         <TransactionRow 
                           key={t.id} 
