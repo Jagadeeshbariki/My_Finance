@@ -34,16 +34,16 @@
         <div class="no-js-message">This application requires JavaScript to function. Please enable it in your browser settings.</div>
     </noscript>
     <div id="root"></div>
-    <!-- Using relative path for Vite entry point to support all deployment types -->
+    <!-- Entry point for Vite/React -->
     <script type="module" src="index.tsx"></script>
     <script>
-      // Service Worker registration with origin-safe relative paths
+      // Service Worker registration with origin-safe paths
       if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('sw.js', { scope: './' })
+          navigator.serviceWorker.register('sw.js')
             .then(reg => console.log('Service Worker Registered'))
             .catch(err => {
-              console.warn('Service Worker registration skipped or failed:', err.message);
+              console.warn('Service Worker registration skipped:', err.message);
             });
         });
       }

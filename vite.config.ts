@@ -3,10 +3,9 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  // Ensures assets load correctly on GitHub Pages and other subfolder-based hosting
   base: './',
   define: {
-    // Specifically shim needed variables for browser context
+    // Critical: Ensures process.env.API_KEY is string-replaced in the browser build
     'process.env.API_KEY': JSON.stringify(process.env.API_KEY),
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
   },

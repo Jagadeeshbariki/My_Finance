@@ -1,11 +1,10 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { Transaction, CategoryType, TransactionDirection } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 export const extractTransactionsFromPDF = async (base64Data: string): Promise<Transaction[]> => {
-  // Use the recommended model for multimodal/PDF tasks
+  // Initialize inside the function to ensure process.env.API_KEY is available at runtime
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  
   const modelName = 'gemini-3-flash-preview';
   
   const prompt = `
@@ -70,6 +69,6 @@ export const extractTransactionsFromPDF = async (base64Data: string): Promise<Tr
     }));
   } catch (error: any) {
     console.error("Gemini Extraction Error:", error);
-    throw new Error(error.message || "Failed to extract data from PDF");
+    throw new Error(error.message || "Failed to extract data from PDF. Please check your API Key and connection.");
   }
 };
