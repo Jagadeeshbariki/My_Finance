@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -125,8 +124,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions }) => {
             {pieData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  {/* Fixed: Moved cornerRadius from Cell to Pie component as it is not supported on Cell */}
-                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={8} dataKey="value" cornerRadius={4}>
+                  <Pie 
+                    data={pieData} 
+                    cx="50%" 
+                    cy="50%" 
+                    innerRadius={60} 
+                    outerRadius={80} 
+                    paddingAngle={8} 
+                    dataKey="value"
+                  >
                     {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
                   </Pie>
                   <Tooltip formatter={(val: number) => [`₹${val.toLocaleString()}`]} />

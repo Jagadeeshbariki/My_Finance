@@ -34,10 +34,9 @@
         <div class="no-js-message">This application requires JavaScript to function. Please enable it in your browser settings.</div>
     </noscript>
     <div id="root"></div>
-    <!-- Entry point for Vite/React -->
+    <!-- Vite handles the transformation of this file and its imports -->
     <script type="module" src="index.tsx"></script>
     <script>
-      // Service Worker registration with origin-safe paths
       if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('sw.js')
