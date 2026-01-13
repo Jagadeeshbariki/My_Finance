@@ -11,14 +11,19 @@ const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyd_fl5wRPoB
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'upload' | 'dashboard'>('upload');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  
   const [history, setHistory] = useState<Transaction[]>(() => {
     const saved = localStorage.getItem('fintrack_history');
     return saved ? JSON.parse(saved) : [];
   });
+  
   const [tags, setTags] = useState<string[]>(() => {
     const saved = localStorage.getItem('fintrack_tags');
     return saved ? JSON.parse(saved) : ['Rent', 'Utilities', 'Software', 'Travel', 'Meals', 'Office Supplies'];
   });
+
   const [scriptUrl, setScriptUrl] = useState<string>(() => {
     return localStorage.getItem('fintrack_script_url') || DEFAULT_SCRIPT_URL;
   });
@@ -26,7 +31,16 @@ const App: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [newTagInput, setNewTagInput] = useState('');
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallBanner(true);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('fintrack_history', JSON.stringify(history));
@@ -39,6 +53,16 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('fintrack_script_url', scriptUrl);
   }, [scriptUrl]);
+
+  const installApp = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setShowInstallBanner(false);
+    }
+    setDeferredPrompt(null);
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -71,29 +95,10 @@ const App: React.FC = () => {
     }
   };
 
-  const updateTransaction = (id: string, updates: Partial<Transaction>) => {
-    setTransactions(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-  };
-
-  const deleteTransaction = (id: string) => {
-    setTransactions(prev => prev.filter(t => t.id !== id));
-  };
-
-  const toggleAllApproval = () => {
-    const allApproved = transactions.every(t => t.status === 'approved');
-    setTransactions(prev => prev.map(t => ({ ...t, status: allApproved ? 'pending' : 'approved' })));
-  };
-
   const syncToSpreadsheet = async () => {
     const approvedTransactions = transactions.filter(t => t.status === 'approved');
-    
     if (approvedTransactions.length === 0) {
       setError('Please select/approve transactions first using the checkboxes.');
-      return;
-    }
-
-    if (!scriptUrl || !scriptUrl.startsWith('https://script.google.com')) {
-      setError('Invalid Google Script URL. Please check your configuration.');
       return;
     }
 
@@ -115,13 +120,10 @@ const App: React.FC = () => {
       await fetch(scriptUrl, {
         method: 'POST',
         mode: 'no-cors',
-        headers: { 
-          'Content-Type': 'text/plain' 
-        },
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(payload),
       });
 
-      // Transfer to history and clear from pending
       const updatedHistory = [...history, ...approvedTransactions];
       setHistory(updatedHistory);
       setTransactions(prev => prev.filter(t => t.status !== 'approved'));
@@ -138,16 +140,21 @@ const App: React.FC = () => {
     }
   };
 
-  const addTag = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newTagInput && !tags.includes(newTagInput)) {
-      setTags(prev => [...prev, newTagInput]);
-      setNewTagInput('');
-    }
-  };
-
   return (
-    <div className="min-h-screen pb-20 bg-slate-50">
+    <div className="min-h-screen pb-20 bg-slate-50 transition-colors duration-500">
+      {showInstallBanner && (
+        <div className="bg-indigo-600 text-white px-4 py-3 flex items-center justify-between shadow-lg sticky top-0 z-[100] animate-in slide-in-from-top duration-500">
+          <div className="flex items-center">
+            <i className="fas fa-mobile-alt mr-3 text-indigo-200"></i>
+            <span className="text-sm font-semibold">Install FinTrack for the best experience!</span>
+          </div>
+          <div className="flex space-x-2">
+            <button onClick={installApp} className="bg-white text-indigo-600 px-4 py-1 rounded-lg text-xs font-bold hover:bg-indigo-50 transition-colors">Install</button>
+            <button onClick={() => setShowInstallBanner(false)} className="text-indigo-200 hover:text-white p-1"><i className="fas fa-times"></i></button>
+          </div>
+        </div>
+      )}
+
       <Header activeTab={activeTab} setActiveTab={setActiveTab} />
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -159,12 +166,6 @@ const App: React.FC = () => {
                   <i className="fas fa-link mr-2 text-indigo-500"></i>
                   Sync Configuration
                 </h3>
-                <button 
-                  onClick={() => setScriptUrl(DEFAULT_SCRIPT_URL)}
-                  className="text-[10px] font-bold text-slate-400 hover:text-indigo-600 uppercase"
-                >
-                  Reset to Default
-                </button>
               </div>
               <input 
                 type="text" 
@@ -174,7 +175,7 @@ const App: React.FC = () => {
                 className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
               />
               <p className="text-[10px] text-slate-400 mt-2 italic">
-                Tip: Deployment access MUST be set to "Anyone". Check your Apps Script settings.
+                Tip: Deployment access MUST be set to "Anyone".
               </p>
             </div>
 
@@ -191,8 +192,8 @@ const App: React.FC = () => {
               </label>
               
               {isProcessing && (
-                <div className="mt-6 flex items-center space-x-2 text-indigo-600 font-bold animate-pulse">
-                  <i className="fas fa-circle-notch fa-spin"></i>
+                <div className="mt-6 flex flex-col items-center text-indigo-600 font-bold animate-pulse">
+                  <i className="fas fa-circle-notch fa-spin text-2xl mb-2"></i>
                   <span>Gemini AI is processing...</span>
                 </div>
               )}
@@ -210,7 +211,10 @@ const App: React.FC = () => {
                 <div className="px-6 py-4 bg-slate-50/80 border-b border-slate-100 flex justify-between items-center">
                   <div className="flex items-center space-x-4">
                     <button 
-                      onClick={toggleAllApproval}
+                      onClick={() => {
+                        const allApproved = transactions.every(t => t.status === 'approved');
+                        setTransactions(transactions.map(t => ({ ...t, status: allApproved ? 'pending' : 'approved' })));
+                      }}
                       className="text-xs font-bold text-indigo-600 bg-indigo-100/50 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors"
                     >
                       {transactions.every(t => t.status === 'approved') ? 'Unselect All' : 'Select All'}
@@ -253,8 +257,8 @@ const App: React.FC = () => {
                           key={t.id} 
                           transaction={t} 
                           tags={tags}
-                          onUpdate={updateTransaction}
-                          onDelete={deleteTransaction}
+                          onUpdate={(id, updates) => setTransactions(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t))}
+                          onDelete={(id) => setTransactions(prev => prev.filter(t => t.id !== id))}
                         />
                       ))}
                     </tbody>
