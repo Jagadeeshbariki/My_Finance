@@ -2,23 +2,23 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Transaction, CategoryType, TransactionDirection } from "../types";
 
 export const extractTransactionsFromPDF = async (base64Data: string): Promise<Transaction[]> => {
-  // Initialize AI client using the provided environment variable
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  // Always initialize with the environment variable directly
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  // Use gemini-3-flash-preview for fast and accurate extraction
+  // Use the recommended model for text/extraction tasks
   const modelName = 'gemini-3-flash-preview';
   
   const prompt = `
-    Analyze this bank statement PDF and extract all transactions. 
-    For each transaction, determine:
-    - date: YYYY-MM-DD
-    - bankName: The name of the bank
-    - description: Merchant name or details
-    - amount: Positive number
-    - direction: "Spent" or "Received"
-    - type: Categorize as "Office" (business/work related) or "Personal" (individual/lifestyle)
+    Analyze this financial bank statement PDF and extract all individual transactions. 
+    For each transaction, precisely identify:
+    - date: The transaction date in YYYY-MM-DD format.
+    - bankName: The name of the bank or financial institution.
+    - description: The merchant name or transaction detail.
+    - amount: The numerical value (always return as a positive number).
+    - direction: "Spent" for debits/withdrawals/purchases or "Received" for credits/deposits.
+    - type: Classify as "Office" if it relates to business (e.g., cloud services, business subscriptions, office rent) or "Personal" for individual/lifestyle spending.
     
-    Output a JSON array of objects.
+    Ensure the output is a clean JSON array.
   `;
 
   try {
@@ -56,7 +56,7 @@ export const extractTransactionsFromPDF = async (base64Data: string): Promise<Tr
     });
 
     const text = response.text;
-    if (!text) throw new Error("No response from AI model.");
+    if (!text) throw new Error("The AI model returned an empty response.");
     
     const parsed = JSON.parse(text);
 
@@ -69,7 +69,7 @@ export const extractTransactionsFromPDF = async (base64Data: string): Promise<Tr
       tag: 'Uncategorized'
     }));
   } catch (error: any) {
-    console.error("Extraction Error:", error);
-    throw new Error(error.message || "Could not extract data. Check your API key and file format.");
+    console.error("Gemini Extraction Error:", error);
+    throw new Error(error.message || "Failed to analyze PDF. Please ensure your API Key is set in the environment settings.");
   }
 };
