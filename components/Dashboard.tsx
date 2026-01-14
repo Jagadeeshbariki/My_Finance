@@ -11,36 +11,55 @@ interface DashboardProps {
 
 export const Dashboard: React.FC<DashboardProps> = ({ transactions }) => {
   const [selectedMonth, setSelectedMonth] = useState<string>('All');
+  const [selectedBank, setSelectedBank] = useState<string>('All');
 
   const availableMonths = useMemo(() => {
     const months = new Set(transactions.map(t => t.date.substring(0, 7)));
     return ['All', ...Array.from(months).sort().reverse()];
   }, [transactions]);
 
+  const availableBanks = useMemo(() => {
+    const banks = new Set(transactions.map(t => t.bankName));
+    return ['All', ...Array.from(banks).sort()];
+  }, [transactions]);
+
   const filteredTransactions = useMemo(() => {
-    if (selectedMonth === 'All') return transactions;
-    return transactions.filter(t => t.date.startsWith(selectedMonth));
-  }, [transactions, selectedMonth]);
+    return transactions.filter(t => {
+      const monthMatch = selectedMonth === 'All' || t.date.startsWith(selectedMonth);
+      const bankMatch = selectedBank === 'All' || t.bankName === selectedBank;
+      return monthMatch && bankMatch;
+    });
+  }, [transactions, selectedMonth, selectedBank]);
 
   const stats = useMemo(() => {
     return filteredTransactions.reduce((acc, t) => {
       const amt = Number(t.amount) || 0;
-      
       if (t.direction === TransactionDirection.RECEIVED) {
         acc.received += amt;
-      } else if (t.direction === TransactionDirection.SPENT) {
+      } else {
         acc.spent += amt;
         if (t.type === CategoryType.PERSONAL) acc.personalSpending += amt;
-        else if (t.type === CategoryType.OFFICE) acc.officeSpending += amt;
+        else acc.officeSpending += amt;
       }
-      
       return acc;
     }, { personalSpending: 0, officeSpending: 0, received: 0, spent: 0 });
   }, [filteredTransactions]);
 
+  const bankData = useMemo(() => {
+    const grouped = filteredTransactions.reduce((acc: any, t) => {
+      const bank = t.bankName || 'Unknown';
+      if (!acc[bank]) acc[bank] = { name: bank, spent: 0, received: 0 };
+      const amt = Number(t.amount) || 0;
+      if (t.direction === TransactionDirection.RECEIVED) acc[bank].received += amt;
+      else acc[bank].spent += amt;
+      return acc;
+    }, {});
+    return Object.values(grouped).sort((a: any, b: any) => b.spent - a.spent);
+  }, [filteredTransactions]);
+
   const pieData = [
-    { name: 'Personal Exp.', value: stats.personalSpending, color: '#6366F1' },
-    { name: 'Office Exp.', value: stats.officeSpending, color: '#10B981' }
+    { name: 'Personal', value: stats.personalSpending, color: '#6366F1' },
+    { name: 'Office', value: stats.officeSpending, color: '#10B981' }
   ].filter(d => d.value > 0);
 
   const tagData = useMemo(() => {
@@ -68,21 +87,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions }) => {
   }, [filteredTransactions, selectedMonth]);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Financial Insights</h2>
-          <p className="text-slate-500 text-sm">Review your tracked spending and income</p>
+          <h2 className="text-xl font-bold text-slate-800">Analytics</h2>
+          <p className="text-slate-500 text-xs">Bank and Monthly Insights</p>
         </div>
-        <select 
-          value={selectedMonth}
-          onChange={(e) => setSelectedMonth(e.target.value)}
-          className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
-        >
-          {availableMonths.map(m => (
-            <option key={m} value={m}>{m === 'All' ? 'Complete History' : m}</option>
-          ))}
-        </select>
+        <div className="flex gap-2">
+          <select 
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none"
+          >
+            {availableMonths.map(m => <option key={m} value={m}>{m === 'All' ? 'All Months' : m}</option>)}
+          </select>
+          <select 
+            value={selectedBank}
+            onChange={(e) => setSelectedBank(e.target.value)}
+            className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none"
+          >
+            {availableBanks.map(b => <option key={b} value={b}>{b === 'All' ? 'All Banks' : b}</option>)}
+          </select>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -94,77 +120,66 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <h3 className="text-lg font-semibold text-slate-800 mb-6 flex items-center">
-            <i className="fas fa-chart-line mr-2 text-indigo-500"></i>
-            Cash Flow Trend
-          </h3>
-          <div className="h-[300px]">
+          <h3 className="text-sm font-bold text-slate-800 mb-6 uppercase tracking-wider">Cash Flow Trend</h3>
+          <div className="h-[250px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={trendData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10}} />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
-                  formatter={(val: number) => [`₹${val.toLocaleString()}`]}
-                />
-                <Area type="monotone" dataKey="spent" stroke="#F97316" fill="#F97316" fillOpacity={0.05} strokeWidth={2} name="Spent" />
-                <Area type="monotone" dataKey="received" stroke="#A855F7" fill="#A855F7" fillOpacity={0.05} strokeWidth={2} name="Received" />
+                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 9}} />
+                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 9}} />
+                <Tooltip />
+                <Area type="monotone" dataKey="spent" stroke="#F97316" fill="#F97316" fillOpacity={0.05} strokeWidth={2} />
+                <Area type="monotone" dataKey="received" stroke="#A855F7" fill="#A855F7" fillOpacity={0.05} strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <h3 className="text-lg font-semibold text-slate-800 mb-6 flex items-center">
-            <i className="fas fa-pie-chart mr-2 text-emerald-500"></i>
-            Expense Mix
-          </h3>
-          <div className="h-[300px]">
-            {pieData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie 
-                    data={pieData} 
-                    cx="50%" 
-                    cy="50%" 
-                    innerRadius={60} 
-                    outerRadius={80} 
-                    paddingAngle={8} 
-                    dataKey="value"
-                  >
-                    {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-                  </Pie>
-                  <Tooltip formatter={(val: number) => [`₹${val.toLocaleString()}`]} />
-                  <Legend verticalAlign="bottom" iconType="circle" />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex items-center justify-center text-slate-400 text-sm">No expense data available</div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {tagData.length > 0 && (
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <h3 className="text-lg font-semibold text-slate-800 mb-6 flex items-center">
-            <i className="fas fa-tags mr-2 text-amber-500"></i>
-            Spending by Tag
-          </h3>
+          <h3 className="text-sm font-bold text-slate-800 mb-6 uppercase tracking-wider">Bank Wise Distribution</h3>
           <div className="h-[250px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={tagData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+              <BarChart data={bankData} layout="vertical">
                 <XAxis type="number" hide />
-                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={100} tick={{fontSize: 11}} />
-                <Tooltip formatter={(val: number) => [`₹${val.toLocaleString()}`]} />
-                <Bar dataKey="value" fill="#F59E0B" radius={[0, 4, 4, 0]} barSize={20} />
+                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={80} tick={{fontSize: 9}} />
+                <Tooltip />
+                <Bar dataKey="spent" fill="#6366F1" radius={[0, 4, 4, 0]} barSize={12} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
-      )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+          <h3 className="text-sm font-bold text-slate-800 mb-6 uppercase tracking-wider">Spending by Tag</h3>
+          <div className="h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={tagData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 9}} />
+                <Tooltip />
+                <Bar dataKey="value" fill="#F59E0B" radius={[4, 4, 0, 0]} barSize={20} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+          <h3 className="text-sm font-bold text-slate-800 mb-6 uppercase tracking-wider">Category Mix</h3>
+          <div className="h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={pieData} innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value">
+                  {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                </Pie>
+                <Tooltip />
+                <Legend iconType="circle" />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
@@ -176,18 +191,13 @@ const StatCard = ({ title, value, icon, color }: { title: string, value: number,
     blue: 'bg-blue-50 text-blue-600',
     emerald: 'bg-emerald-50 text-emerald-600'
   };
-
   return (
-    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-start justify-between hover:shadow-md transition-shadow">
+    <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
       <div>
-        <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">{title}</p>
-        <p className="text-xl font-bold text-slate-900 mt-1 tabular-nums">
-          ₹{value.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-        </p>
+        <p className="text-slate-400 text-[9px] font-bold uppercase tracking-wider">{title}</p>
+        <p className="text-lg font-bold text-slate-900 mt-1">₹{value.toLocaleString()}</p>
       </div>
-      <div className={`p-3 rounded-xl ${colorMap[color] || 'bg-slate-50'}`}>
-        <i className={`fas ${icon} text-lg`}></i>
-      </div>
+      <div className={`p-3 rounded-xl ${colorMap[color]}`}><i className={`fas ${icon}`}></i></div>
     </div>
   );
 };
